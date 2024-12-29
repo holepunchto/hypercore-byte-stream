@@ -7,15 +7,15 @@ const ByteStream = require('./')
 test('basic', async function (t) {
   const { id, core } = await create(t, ['a', 'b', 'c', 'd', 'e'])
 
-  const all = await collect(new ByteStream(core, id))
+  const all = await collect(new ByteStream(core.session(), id))
 
   t.alike(all, ['a', 'b', 'c', 'd', 'e'])
 
-  const half = await collect(new ByteStream(core, id, { length: 3 }))
+  const half = await collect(new ByteStream(core.session(), id, { length: 3 }))
 
   t.alike(half, ['a', 'b', 'c'])
 
-  const lastHalf = await collect(new ByteStream(core, id, { start: 3 }))
+  const lastHalf = await collect(new ByteStream(core.session(), id, { start: 3 }))
 
   t.alike(lastHalf, ['d', 'e'])
 })
@@ -28,15 +28,15 @@ test('multiple blobs', async function (t) {
   id.byteOffset += 2
   id.byteLength -= 2
 
-  const all = await collect(new ByteStream(core, id))
+  const all = await collect(new ByteStream(core.session(), id))
 
   t.alike(all, ['c', 'd', 'e'])
 
-  const half = await collect(new ByteStream(core, id, { length: 2 }))
+  const half = await collect(new ByteStream(core.session(), id, { length: 2 }))
 
   t.alike(half, ['c', 'd'])
 
-  const lastHalf = await collect(new ByteStream(core, id, { start: 2 }))
+  const lastHalf = await collect(new ByteStream(core.session(), id, { start: 2 }))
 
   t.alike(lastHalf, ['e'])
 })
@@ -45,32 +45,32 @@ test('seeks', async function (t) {
   const { id, core } = await create(t, ['aaaa', 'bb', 'ccc', 'd', 'eeeeeeeeee'], 2)
 
   {
-    const result = await collect(new ByteStream(core, id))
+    const result = await collect(new ByteStream(core.session(), id))
     t.alike(result, ['aaaa', 'bb', 'ccc', 'd', 'eeeeeeeeee', 'aaaa', 'bb', 'ccc', 'd', 'eeeeeeeeee'])
   }
 
   {
-    const result = await collect(new ByteStream(core, id, { start: 12 }))
+    const result = await collect(new ByteStream(core.session(), id, { start: 12 }))
     t.alike(result, ['eeeeeeee', 'aaaa', 'bb', 'ccc', 'd', 'eeeeeeeeee'])
   }
 
   {
-    const result = await collect(new ByteStream(core, id, { start: 12, length: 10 }))
+    const result = await collect(new ByteStream(core.session(), id, { start: 12, length: 10 }))
     t.alike(result, ['eeeeeeee', 'aa'])
   }
 
   {
-    const result = await collect(new ByteStream(core, id, { start: 12, length: 5 }))
+    const result = await collect(new ByteStream(core.session(), id, { start: 12, length: 5 }))
     t.alike(result, ['eeeee'])
   }
 
   {
-    const result = await collect(new ByteStream(core, id, { start: 12, end: 16 }))
+    const result = await collect(new ByteStream(core.session(), id, { start: 12, end: 16 }))
     t.alike(result, ['eeeee'])
   }
 
   {
-    const result = await collect(new ByteStream(core, id, { start: 12, length: 9999 }))
+    const result = await collect(new ByteStream(core.session(), id, { start: 12, length: 9999 }))
     t.alike(result, ['eeeeeeee', 'aaaa', 'bb', 'ccc', 'd', 'eeeeeeeeee'])
   }
 })
@@ -80,7 +80,7 @@ test('deferred', async function (t) {
 
   {
     const b = new ByteStream(null, null)
-    b.start(core, id)
+    b.start(core.session(), id)
 
     const result = await collect(b)
     t.alike(result, ['hello', 'world'])
@@ -88,7 +88,7 @@ test('deferred', async function (t) {
 
   {
     const b = new ByteStream(null, null, { start: 2, length: 4 })
-    b.start(core, id)
+    b.start(core.session(), id)
 
     const result = await collect(b)
     t.alike(result, ['llo', 'w'])
@@ -99,13 +99,13 @@ test('one', async function (t) {
   const { core } = await create(t, ['hello', 'world'])
 
   {
-    const b = ByteStream.one(core)
+    const b = ByteStream.one(core.session())
     const result = await collect(b)
     t.alike(result, ['hello', 'world'])
   }
 
   {
-    const b = ByteStream.one(core, { start: 2, length: 4 })
+    const b = ByteStream.one(core.session(), { start: 2, length: 4 })
     const result = await collect(b)
     t.alike(result, ['llo', 'w'])
   }

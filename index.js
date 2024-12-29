@@ -9,21 +9,17 @@ module.exports = class BlobReadStream extends Readable {
     super(opts)
 
     const {
-      timeout = 0,
-      wait = true,
       prefetch = 64,
       start = 0,
       end = -1,
       length = end === -1 ? -1 : end - start + 1
     } = opts
 
-    this.core = core ? core.session({ timeout, wait }) : null
+    this.core = core
     this.id = id
 
-    this._timeout = timeout
-    this._wait = wait
     this._prefetch = null
-    this._maxPrefetch = wait === false || prefetch === false ? 0 : prefetch
+    this._maxPrefetch = prefetch === false ? 0 : prefetch
     this._lastPrefetch = null
     this._openCallback = null
 
@@ -43,7 +39,7 @@ module.exports = class BlobReadStream extends Readable {
   start (core, id) {
     if (this.destroying) return
 
-    if (this.core === null) this.core = core.session({ timeout: this._timeout, wait: this._wait })
+    if (this.core === null) this.core = core
     this.id = id
 
     this._continueOpen(null)

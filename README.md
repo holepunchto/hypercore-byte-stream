@@ -17,7 +17,8 @@ const ByteStream = require('hypercore-byte-stream')
 // should contain the following { blockOffset, blockLength, byteOffset, byteLength }
 
 // options can be used be specify a byte range { start, length }
-// other options include, { wait, timeout, maxPrefetch }
+// other options include, { maxPrefetch }
+// note that the stream will close the core session when done, ie it takes full ownership of it
 const stream = new ByteStream(core, id, options)
 
 // if the core only contains a single blob you can use the one helper to init the blob id for you
