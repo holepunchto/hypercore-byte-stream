@@ -20,6 +20,14 @@ test('basic', async function (t) {
   t.alike(lastHalf, ['d', 'e'])
 })
 
+test('out or range', async function (t) {
+  const { id, core } = await create(t, ['Hello World'])
+
+  const all = await collect(new ByteStream(core.session(), id, { start: 0, length: 21 }))
+
+  t.alike(all, ['Hello World'])
+})
+
 test('multiple blobs', async function (t) {
   const { id, core } = await create(t, ['a', 'b', 'c', 'd', 'e'])
 
