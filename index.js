@@ -45,10 +45,19 @@ module.exports = class BlobReadStream extends Readable {
     this._continueOpen(null)
   }
 
-  _open (cb) {
+  async _open (cb) {
     if (this.core === null || this.id === null) {
       this._openCallback = cb
       return
+    }
+
+    if (!this.core.opened) {
+      try {
+        await this.core.ready()
+      } catch (err) {
+        cb(err)
+        return
+      }
     }
 
     this._index = this.id.blockOffset
