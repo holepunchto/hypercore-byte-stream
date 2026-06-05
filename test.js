@@ -28,6 +28,14 @@ test('out or range', async function (t) {
   t.alike(all, ['Hello World'])
 })
 
+test('negative length != -1', async function (t) {
+  const { id, core } = await create(t, ['Hello World'])
+
+  const all = await collect(new ByteStream(core.session(), id, { start: 0, length: -2 }))
+
+  t.alike(all, [])
+})
+
 test('multiple blobs', async function (t) {
   const { id, core } = await create(t, ['a', 'b', 'c', 'd', 'e'])
 
