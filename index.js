@@ -135,9 +135,7 @@ module.exports = class BlobReadStream extends Readable {
     this._length -= block.byteLength
 
     this.push(block)
-    if (this._length === 0 || this._index >= this._blockEnd) {
-      this.push(null)
-    }
+    if (this._length === 0 || this._index >= this._blockEnd) this.push(null)
 
     cb(null)
   }
