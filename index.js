@@ -1,6 +1,5 @@
 const { Readable } = require('streamx')
 const { BLOCK_NOT_AVAILABLE } = require('hypercore-errors')
-const Prefetcher = require('./prefetcher')
 
 const DESTROYED = new Error('Destroyed')
 
@@ -9,7 +8,7 @@ module.exports = class BlobReadStream extends Readable {
     super(opts)
 
     const {
-      prefetch = 64,
+      prefetch,
       start = 0,
       end = -1,
       length = end === -1 ? -1 : end - start + 1
@@ -18,16 +17,15 @@ module.exports = class BlobReadStream extends Readable {
     this.core = core
     this.id = id
 
-    this._prefetch = null
-    this._maxPrefetch = prefetch === false ? 0 : prefetch
-    this._lastPrefetch = null
+    this._prefetch = prefetch !== false && core && core.core
+    this._range = null
     this._openCallback = null
 
     this._index = 0
     this._blockEnd = 0
     this._relativeOffset = 0
-    this._start = start
-    this._length = length
+    this._start = start // bytes position relative to file
+    this._length = length // bytes
   }
 
   static one (core, options) {
@@ -60,66 +58,53 @@ module.exports = class BlobReadStream extends Readable {
       }
     }
 
-    this._index = this.id.blockOffset
+    if (this._length === -1) this._length = this.id.byteLength - this._start
     this._blockEnd = this.id.blockOffset + this.id.blockLength
 
-    if (this._length === -1) {
-      this._length = this.id.byteLength - this._start
-    }
+    const [start, end] = await Promise.all([this._setStart(), this._setEnd()])
+    if (start < this.id.blockOffset || start >= this._blockEnd) {
+      this._length = 0
+      this.push(null)
 
-    if (this._maxPrefetch > 0 && this.core.core) {
-      this._prefetch = new Prefetcher(this.core, {
-        max: this._maxPrefetch,
-        start: this.id.blockOffset,
-        end: this._blockEnd
-      })
-    }
-
-    if (this._start !== 0) {
-      this._seekAndOpen(cb)
+      cb(null)
       return
     }
 
-    if (this._length <= 0 || this._index >= this._blockEnd) {
-      this.push(null)
-    }
+    if (this._prefetch) this._range = this.core.download({ start, end, linear: true })
 
     cb(null)
   }
 
-  async _seekAndOpen (cb) {
+  async _setStart () {
+    if (this._start === 0) {
+      this._index = this.id.blockOffset
+      this._relativeOffset = 0
+      return this._index
+    }
+
     const bytes = this.id.byteOffset + this._start
-    let result = null
 
-    try {
-      result = await this.core.seek(bytes, {
-        start: this.id.blockOffset,
-        end: this.id.blockOffset + this.id.blockLength
-      })
-    } catch (err) {
-      cb(err)
-      return
-    }
-
-    if (!result) {
-      cb(BLOCK_NOT_AVAILABLE())
-      return
-    }
+    const result = await this.core.seek(bytes)
+    if (!result) throw BLOCK_NOT_AVAILABLE()
 
     this._index = result[0]
     this._relativeOffset = result[1]
 
-    if (this._index < this.id.blockOffset || this._index >= this._blockEnd) {
-      this._length = 0
-      this.push(null)
+    return this._index
+  }
+
+  async _setEnd () {
+    if (this._length >= this.id.byteLength || this._length === -1) {
+      return this.id.blockOffset + this.id.blockLength
     }
 
-    cb(null)
+    const bytes = this._start + this.id.byteOffset + this._length
+    const result = await this.core.seek(bytes)
+    if (!result) return this.id.blockOffset + this.id.blockLength
+    return result[0]
   }
 
   async _read (cb) {
-    if (this._prefetch !== null) this._prefetch.update(this._index)
-
     let block = null
 
     try {
@@ -147,7 +132,9 @@ module.exports = class BlobReadStream extends Readable {
     this._length -= block.byteLength
 
     this.push(block)
-    if (this._length === 0 || this._index >= this._blockEnd) this.push(null)
+    if (this._length === 0 || this._index >= this._blockEnd) {
+      this.push(null)
+    }
 
     cb(null)
   }
@@ -167,9 +154,9 @@ module.exports = class BlobReadStream extends Readable {
   }
 
   _teardown () {
-    if (this._prefetch !== null) {
-      this._prefetch.destroy()
-      this._prefetch = null
+    if (this._range !== null) {
+      this._range.destroy()
+      this._range = null
     }
 
     if (this.core !== null) return this.core.close()
