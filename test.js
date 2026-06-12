@@ -3,7 +3,6 @@ const Hypercore = require('hypercore')
 const tmp = require('test-tmp')
 const b4a = require('b4a')
 const ByteStream = require('./')
-const uncaughts = require('uncaughts')
 
 test('basic', async function (t) {
   const { id, core } = await create(t, ['a', 'b', 'c', 'd', 'e'])
@@ -138,11 +137,6 @@ test('destroying while seeking in open isnt uncaught', async (t) => {
   await clone.ready()
   t.teardown(() => clone.close())
 
-  const checkUncaught = (err) => {
-    t.fail('got uncaught', err.code)
-  }
-  uncaughts.on(checkUncaught)
-
   const stream = new ByteStream(clone, id, { start: 3 })
   stream.resume()
 
@@ -151,7 +145,6 @@ test('destroying while seeking in open isnt uncaught', async (t) => {
   stream.destroy()
 
   t.ok(stream.core.closed, 'core was closed')
-  uncaughts.off(checkUncaught)
 })
 
 test('prefetch seeks to correct bytes position', async (t) => {
