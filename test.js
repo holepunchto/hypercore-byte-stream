@@ -154,7 +154,7 @@ test('destroying while seeking in open isnt uncaught', async (t) => {
   uncaughts.off(checkUncaught)
 })
 
-test('prefetch request correct range', async (t) => {
+test('prefetch seeks to correct bytes position', async (t) => {
   const { id, core } = await create(t, ['a', 'b', 'c', 'd', 'e'])
 
   const dir = await t.tmp()
