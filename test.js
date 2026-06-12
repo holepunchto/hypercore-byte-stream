@@ -127,6 +127,75 @@ test('one', async function (t) {
   }
 })
 
+test('destroying while seeking in open isnt uncaught', async (t) => {
+  const { id, core } = await create(t, ['a', 'b', 'c', 'd', 'e'])
+
+  // Clone with no info (by design)
+  const dir = await t.tmp()
+  const clone = new Hypercore(dir, core.key)
+  await clone.ready()
+  t.teardown(() => clone.close())
+
+  const stream = new ByteStream(clone, id, { start: 3 })
+  let opened = false
+  stream.on('open', () => {
+    opened = true
+  })
+  stream.resume()
+
+  await new Promise((resolve) => setImmediate(resolve)) // Allow the seek to register
+
+  stream.destroy()
+
+  t.absent(opened, 'stream didnt open')
+})
+
+test('prefetch seeks to correct bytes position', async (t) => {
+  const { id, core } = await create(t, ['a', 'b', 'c', 'd', 'e'])
+
+  const dir = await t.tmp()
+  const clone = new Hypercore(dir, core.key)
+  await clone.ready()
+  t.teardown(() => clone.close())
+
+  replicate(core, clone, t)
+
+  const stream = new ByteStream(clone, id, { start: 3, length: 4 })
+  stream.resume()
+
+  await new Promise((resolve) => setImmediate(resolve)) // Allow the seek to register
+
+  t.absent(clone.activeRequests.some((r) => r.context.seeker.bytes > id.byteLength + id.byteOffset), 'no seek request > id\'s byte offset & length')
+  stream.destroy()
+})
+
+test('prefetch range includes all blocks needed', async (t) => {
+  t.plan(2)
+  const { id, core } = await create(t, ['a', 'b', 'c', 'd', 'e'])
+
+  const dir = await t.tmp()
+  const clone = new Hypercore(dir, core.key)
+  await clone.ready()
+  t.teardown(() => clone.close())
+
+  replicate(core, clone, t)
+
+  const stream = new ByteStream(clone, id, { start: 1, length: 3 })
+  stream.resume()
+  const range = { start: -1, end: -1 }
+  const all = []
+  stream.on('open', () => {
+    const rangeReqs = clone.activeRequests.find((r) => 'ranges' in r.context)
+    t.ok(rangeReqs, 'found range request in open')
+    range.start = rangeReqs.context.start
+    range.end = rangeReqs.context.end
+  }).on('data', (data) => {
+    all.push(data)
+  }).on('close', () => {
+    t.is(range.end - range.start, all.length, 'range length = stream length')
+  })
+})
+
 async function create (t, blocks, repeat = 1) {
   const dir = await tmp(t)
   const core = new Hypercore(dir)
@@ -157,4 +226,32 @@ async function collect (stream) {
   const chunks = []
   for await (const data of stream) chunks.push(b4a.toString(data))
   return chunks
+}
+
+function replicate (a, b, t, opts = {}) {
+  const s1 = a.replicate(true, { keepAlive: false, ...opts })
+  const s2 = b.replicate(false, { keepAlive: false, ...opts })
+
+  const closed1 = new Promise((resolve) => s1.once('close', resolve))
+  const closed2 = new Promise((resolve) => s2.once('close', resolve))
+
+  s1.on('error', (err) => {
+    t.comment(`replication stream error (initiator): ${err}`)
+  })
+  s2.on('error', (err) => {
+    t.comment(`replication stream error (responder): ${err}`)
+  })
+
+  if (opts.teardown !== false) {
+    t.teardown(async function () {
+      s1.destroy()
+      s2.destroy()
+      await closed1
+      await closed2
+    })
+  }
+
+  s1.pipe(s2).pipe(s1)
+
+  return [s1, s2]
 }
