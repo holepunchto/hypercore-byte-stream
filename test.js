@@ -3,6 +3,7 @@ const Hypercore = require('hypercore')
 const tmp = require('test-tmp')
 const b4a = require('b4a')
 const ByteStream = require('./')
+const uncaughts = require('uncaughts')
 
 test('basic', async function (t) {
   const { id, core } = await create(t, ['a', 'b', 'c', 'd', 'e'])
@@ -125,6 +126,32 @@ test('one', async function (t) {
     const result = await collect(b)
     t.alike(result, ['llo', 'w'])
   }
+})
+
+test('destroying while seeking in open isnt uncaught', async (t) => {
+  t.plan(1)
+  const { id, core } = await create(t, ['a', 'b', 'c', 'd', 'e'])
+
+  // Clone with no info (by design)
+  const dir = await t.tmp()
+  const clone = new Hypercore(dir, core.key)
+  await clone.ready()
+  t.teardown(() => clone.close())
+
+  const checkUncaught = (err) => {
+    t.fail('got uncaught', err.code)
+  }
+  uncaughts.on(checkUncaught)
+
+  const stream = new ByteStream(clone, id, { start: 3 })
+  stream.resume()
+
+  await new Promise((resolve) => setImmediate(resolve)) // Allow the seek to register
+
+  stream.destroy()
+
+  t.ok(stream.core.closed, 'core was closed')
+  uncaughts.off(checkUncaught)
 })
 
 async function create (t, blocks, repeat = 1) {
