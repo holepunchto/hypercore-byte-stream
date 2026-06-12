@@ -69,7 +69,13 @@ module.exports = class BlobReadStream extends Readable {
       return
     }
 
-    const [start, end] = await Promise.all([this._setStart(), this._prefetch ? this._setEnd() : Promise.resolve(0)])
+    let start, end
+    try {
+      [start, end] = await Promise.all([this._setStart(), this._prefetch ? this._setEnd() : Promise.resolve(0)])
+    } catch (err) {
+      cb(err)
+      return
+    }
     if (start < this.id.blockOffset || start >= this._blockEnd) {
       this._length = 0
       this.push(null)
