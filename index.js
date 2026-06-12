@@ -102,7 +102,7 @@ module.exports = class BlobReadStream extends Readable {
   }
 
   async _setEnd () {
-    if (this._length >= this.id.byteLength || this._length === -1) {
+    if (this._length >= this.id.byteLength || this._length === -1 || this._start + this._length >= this.id.byteLength) {
       return this.id.blockOffset + this.id.blockLength
     }
 

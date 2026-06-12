@@ -154,6 +154,25 @@ test('destroying while seeking in open isnt uncaught', async (t) => {
   uncaughts.off(checkUncaught)
 })
 
+test('prefetch request correct range', async (t) => {
+  const { id, core } = await create(t, ['a', 'b', 'c', 'd', 'e'])
+
+  const dir = await t.tmp()
+  const clone = new Hypercore(dir, core.key)
+  await clone.ready()
+  t.teardown(() => clone.close())
+
+  replicate(core, clone, t)
+
+  const stream = new ByteStream(clone, id, { start: 3, length: 4 })
+  stream.resume()
+
+  await new Promise((resolve) => setImmediate(resolve)) // Allow the seek to register
+
+  t.absent(clone.activeRequests.some((r) => r.context.seeker.bytes > id.byteLength + id.byteOffset), 'no seek request > id\'s byte offset & length')
+  stream.destroy()
+})
+
 async function create (t, blocks, repeat = 1) {
   const dir = await tmp(t)
   const core = new Hypercore(dir)
@@ -184,4 +203,32 @@ async function collect (stream) {
   const chunks = []
   for await (const data of stream) chunks.push(b4a.toString(data))
   return chunks
+}
+
+function replicate (a, b, t, opts = {}) {
+  const s1 = a.replicate(true, { keepAlive: false, ...opts })
+  const s2 = b.replicate(false, { keepAlive: false, ...opts })
+
+  const closed1 = new Promise((resolve) => s1.once('close', resolve))
+  const closed2 = new Promise((resolve) => s2.once('close', resolve))
+
+  s1.on('error', (err) => {
+    t.comment(`replication stream error (initiator): ${err}`)
+  })
+  s2.on('error', (err) => {
+    t.comment(`replication stream error (responder): ${err}`)
+  })
+
+  if (opts.teardown !== false) {
+    t.teardown(async function () {
+      s1.destroy()
+      s2.destroy()
+      await closed1
+      await closed2
+    })
+  }
+
+  s1.pipe(s2).pipe(s1)
+
+  return [s1, s2]
 }
