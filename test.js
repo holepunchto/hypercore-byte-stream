@@ -128,7 +128,6 @@ test('one', async function (t) {
 })
 
 test('destroying while seeking in open isnt uncaught', async (t) => {
-  t.plan(1)
   const { id, core } = await create(t, ['a', 'b', 'c', 'd', 'e'])
 
   // Clone with no info (by design)
@@ -138,13 +137,17 @@ test('destroying while seeking in open isnt uncaught', async (t) => {
   t.teardown(() => clone.close())
 
   const stream = new ByteStream(clone, id, { start: 3 })
+  let opened = false
+  stream.on('open', () => {
+    opened = true
+  })
   stream.resume()
 
   await new Promise((resolve) => setImmediate(resolve)) // Allow the seek to register
 
   stream.destroy()
 
-  t.ok(stream.core.closed, 'core was closed')
+  t.absent(opened, 'stream didnt open')
 })
 
 test('prefetch seeks to correct bytes position', async (t) => {
