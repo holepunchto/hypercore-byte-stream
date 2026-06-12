@@ -173,6 +173,33 @@ test('prefetch seeks to correct bytes position', async (t) => {
   stream.destroy()
 })
 
+test('prefetch range includes all blocks needed', async (t) => {
+  t.plan(2)
+  const { id, core } = await create(t, ['a', 'b', 'c', 'd', 'e'])
+
+  const dir = await t.tmp()
+  const clone = new Hypercore(dir, core.key)
+  await clone.ready()
+  t.teardown(() => clone.close())
+
+  replicate(core, clone, t)
+
+  const stream = new ByteStream(clone, id, { start: 1, length: 3 })
+  stream.resume()
+  const range = { start: -1, end: -1 }
+  const all = []
+  stream.on('open', () => {
+    const rangeReqs = clone.activeRequests.find((r) => 'ranges' in r.context)
+    t.ok(rangeReqs, 'found range request in open')
+    range.start = rangeReqs.context.start
+    range.end = rangeReqs.context.end
+  }).on('data', (data) => {
+    all.push(data)
+  }).on('close', () => {
+    t.is(range.end - range.start, all.length, 'range length = stream length')
+  })
+})
+
 async function create (t, blocks, repeat = 1) {
   const dir = await tmp(t)
   const core = new Hypercore(dir)
