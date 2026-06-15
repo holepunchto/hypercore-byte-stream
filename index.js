@@ -43,20 +43,8 @@ module.exports = class BlobReadStream extends Readable {
     this._continueOpen(null)
   }
 
-  async _open (cb) {
-    if (this.core === null || this.id === null) {
-      this._openCallback = cb
-      return
-    }
-
-    if (!this.core.opened) {
-      try {
-        await this.core.ready()
-      } catch (err) {
-        cb(err)
-        return
-      }
-    }
+  async _openp () {
+    if (!this.core.opened) await this.core.ready()
 
     if (this._length === -1) this._length = this.id.byteLength - this._start
     this._blockEnd = this.id.blockOffset + this.id.blockLength
@@ -64,8 +52,6 @@ module.exports = class BlobReadStream extends Readable {
     if (this._length <= 0) {
       this._length = 0
       this.push(null)
-
-      cb(null)
       return
     }
 
@@ -73,14 +59,19 @@ module.exports = class BlobReadStream extends Readable {
     if (start < this.id.blockOffset || start >= this._blockEnd) {
       this._length = 0
       this.push(null)
-
-      cb(null)
       return
     }
 
     if (this._prefetch) this._range = this.core.download({ start, end, linear: true })
+  }
 
-    cb(null)
+  _open (cb) {
+    if (this.core === null || this.id === null) {
+      this._openCallback = cb
+      return
+    }
+
+    this._openp().then(cb, cb)
   }
 
   async _setStart () {
@@ -102,7 +93,7 @@ module.exports = class BlobReadStream extends Readable {
   }
 
   async _setEnd () {
-    if (this._length >= this.id.byteLength || this._length === -1) {
+    if (this._start + this._length >= this.id.byteLength || this._length === -1) {
       return this.id.blockOffset + this.id.blockLength
     }
 
