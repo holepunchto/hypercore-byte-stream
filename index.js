@@ -43,7 +43,7 @@ module.exports = class BlobReadStream extends Readable {
     this._continueOpen(null)
   }
 
-  async _openp (cb) {
+  async _openp () {
     if (!this.core.opened) await this.core.ready()
 
     if (this._length === -1) this._length = this.id.byteLength - this._start
@@ -71,7 +71,7 @@ module.exports = class BlobReadStream extends Readable {
       return
     }
 
-    this._openp(cb).then(cb, cb)
+    this._openp().then(cb, cb)
   }
 
   async _setStart () {
